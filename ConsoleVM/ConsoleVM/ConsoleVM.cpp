@@ -15,22 +15,25 @@ int _tmain(int argc, _TCHAR* argv[])
 		_tprintf(TEXT("Client will be started \n"));
 		return main2(argc, argv);
 	}
-	if (argc == 2 && !strcmp(argv[1], "srv")) {
+	else if (argc == 2 && !strcmp(argv[1], "srv")) {
 		_tprintf(TEXT("Server will be started \n"));
 		return main3();
 	}
-	if (argc == 2 && !strcmp(argv[1], "srv_service")) {
-		if (argc == 3) {
+	else if ((argc >= 2 ) && (!strcmp(argv[1], "srv_service"))) {
+		if (argc >= 3) {
 			_tprintf(TEXT("Service will be started \n"));
 			mainS(argc, argv);
 		} else {
-			_tprintf(TEXT("For installation add 'install'! \n"));
+			_tprintf(TEXT("Need more arguments!\n"));
 		}
 	}
+	else if (argc == 1) {
+		mainS(argc, argv);
+ 	}
 	_tprintf(TEXT("End of startings \n"));
 	//_tmain1(argc, argv);
 
-	getchar();
+	//getchar();
 	return 0;
 }
 
