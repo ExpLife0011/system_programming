@@ -104,7 +104,8 @@ int __cdecl main2(int argc, TCHAR **argv)
 	// Receive until the peer closes the connection
 	do {
 		printf("Enter buffer: ");
-		scanf_s("%s", sendbuf, DEFAULT_BUFLEN);
+		if (gets_s(sendbuf, DEFAULT_BUFLEN) == NULL)
+			break;
 		printf("Buffer is: %s, Size: %d\n", sendbuf, (int)strlen(sendbuf));
 		iResult = send(ConnectSocket, sendbuf, (int)strlen(sendbuf), 0);
 		if (iResult == SOCKET_ERROR) {
@@ -118,7 +119,7 @@ int __cdecl main2(int argc, TCHAR **argv)
 		memset(recvbuf, 0, DEFAULT_BUFLEN);
 		iResult = recv(ConnectSocket, recvbuf, recvbuflen, 0);
 		if (iResult > 0)
-			printf("Bytes received: %d, Buufer: %s\n", iResult, recvbuf);
+			printf("Bytes received: %d, Buffer: \n%s\n", iResult, recvbuf);
 		else if (iResult == 0)
 			printf("Connection closed\n");
 		else

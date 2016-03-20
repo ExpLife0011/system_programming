@@ -206,7 +206,7 @@ int InitPipe()
 void CreateChildProcess()
 // Create a child process that uses the previously created pipes for STDIN and STDOUT.
 {
-	TCHAR szCmdline[] = TEXT("cmd.exe");
+	TCHAR szCmdline[] = _T("cmd.exe");
 	PROCESS_INFORMATION piProcInfo;
 	STARTUPINFO siStartInfo;
 	BOOL bSuccess = FALSE;

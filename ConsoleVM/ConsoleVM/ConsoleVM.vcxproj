@@ -52,6 +52,7 @@
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
+      <CompileAs>CompileAsC</CompileAs>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -85,7 +86,9 @@
   <ItemGroup>
     <ClCompile Include="1.cpp" />
     <ClCompile Include="ConsoleVM.cpp" />
-    <ClCompile Include="scli.cpp" />
+    <ClCompile Include="scli.cpp">
+      <CompileAs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">CompileAsC</CompileAs>
+    </ClCompile>
     <ClCompile Include="ssrv.cpp" />
     <ClCompile Include="ssrv_service.cpp" />
     <ClCompile Include="stdafx.cpp">
