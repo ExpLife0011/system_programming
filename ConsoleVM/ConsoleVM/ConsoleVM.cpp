@@ -5,21 +5,21 @@
 #include <stdio.h>
 
 int _tmain1(int argc, TCHAR *argv[]);
-int __cdecl main2(int argc, char **argv);
+int __cdecl main2(int argc, TCHAR **argv);
 int __cdecl main3(void);
 void __cdecl mainS(int argc, TCHAR *argv[]);
 
 int _tmain(int argc, _TCHAR* argv[])
 {
-	if (argc == 2 && !strcmp(argv[1], "cli")) {
+	if (argc == 2 && !_tcscmp(argv[1], _T("cli"))) {
 		_tprintf(TEXT("Client will be started \n"));
 		return main2(argc, argv);
 	}
-	else if (argc == 2 && !strcmp(argv[1], "srv")) {
+	else if (argc == 2 && !_tcscmp(argv[1], _T("srv"))) {
 		_tprintf(TEXT("Server will be started \n"));
 		return main3();
 	}
-	else if ((argc >= 2 ) && (!strcmp(argv[1], "srv_service"))) {
+	else if ((argc >= 2 ) && (!_tcscmp(argv[1], _T("srv_service")))) {
 		if (argc >= 3) {
 			_tprintf(TEXT("Service will be started \n"));
 			mainS(argc, argv);

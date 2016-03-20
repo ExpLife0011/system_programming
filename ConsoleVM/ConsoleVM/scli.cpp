@@ -14,9 +14,9 @@
 
 #define DEFAULT_BUFLEN 4096
 #define DEFAULT_PORT "27015"
-#define IP_ADDRESS "192.168.175.136"
+#define IP_ADDRESS "127.0.0.1"
 
-int __cdecl main2(int argc, char **argv)
+int __cdecl main2(int argc, TCHAR **argv)
 {
 	WSADATA wsaData;
 	SOCKET ConnectSocket = INVALID_SOCKET;

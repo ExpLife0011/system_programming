@@ -15,7 +15,7 @@ SERVICE_STATUS gServiceStatus;
 SERVICE_STATUS_HANDLE gStatusHandle;
 
 
-void ServiceMain(int argc, char** argv);
+void ServiceMain(int argc, TCHAR* argv[]);
 void ControlHandler(DWORD request);
 int InitService();
 VOID SvcReportEvent(LPTSTR szFunction);
@@ -36,23 +36,23 @@ void mainS(int argc, _TCHAR* argv[])
 		addLogMessage("StartSvc");
 
 		if (!StartServiceCtrlDispatcher(ServiceTable)) {
-			char msg[320];
-			sprintf_s(msg, "Error: StartServiceCtrlDispatcher: %u", GetLastError());
-			addLogMessage(msg);
+			TCHAR msg[320];
+			_tprintf_s(msg, "Error: StartServiceCtrlDispatcher: %u", GetLastError());
+			SvcReportEvent(msg);
 		}
 		return;
 	}
-	else if ((argc == 4) && (strcmp(argv[2], _T("install")) == 0)) {
+	else if ((argc == 4) && (_tcscmp(argv[2], _T("install")) == 0)) {
 		gServicePath = argv[3];
 		InstallService();
 	}
-	else if (strcmp(argv[2], _T("remove")) == 0) {
+	else if (_tcscmp(argv[2], _T("remove")) == 0) {
 		RemoveService();
 	}
-	else if (strcmp(argv[2], _T("start")) == 0){
+	else if (_tcscmp(argv[2], _T("start")) == 0){
 		StartServiceCmd();
 	}
-	else if (strcmp(argv[2], _T("stop")) == 0){
+	else if (_tcscmp(argv[2], _T("stop")) == 0){
 		StopService();
 	}
 	else {
@@ -62,7 +62,7 @@ void mainS(int argc, _TCHAR* argv[])
 	return;
 }
 
-void ServiceMain(int argc, char** argv)
+void ServiceMain(int argc, TCHAR* argv[])
 {
 	int error;
 	int i = 0;
@@ -95,7 +95,7 @@ void ServiceMain(int argc, char** argv)
 	SetServiceStatus(gStatusHandle, &gServiceStatus);
 	
 	// TODO We should check CurrentState inside main service loop
-	//main3();
+	main3();
 
 	while (gServiceStatus.dwCurrentState == SERVICE_RUNNING)
 	{
