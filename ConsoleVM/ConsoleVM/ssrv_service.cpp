@@ -7,7 +7,9 @@
 #include <tchar.h>
 #include <strsafe.h>
 
-#define addLogMessage(x) SvcReportEvent(_T(x))
+#define addLogMessage(x) SvcReportInfo(_T(x))
+#define SvcReportError(x) SvcReportEvent(EVENTLOG_ERROR_TYPE, (x))
+#define SvcReportInfo(x) SvcReportEvent(EVENTLOG_WARNING_TYPE, (x))
 
 _TCHAR *gServiceName = _T("ConsoleVMSvc2");
 _TCHAR *gServicePath;
@@ -18,7 +20,7 @@ SERVICE_STATUS_HANDLE gStatusHandle;
 void ServiceMain(int argc, TCHAR* argv[]);
 void ControlHandler(DWORD request);
 int InitService();
-VOID SvcReportEvent(LPTSTR szFunction);
+VOID SvcReportEvent(unsigned type, LPTSTR szFunction);
 int StartServiceCmd();
 int RemoveService();
 int InstallService();
@@ -27,18 +29,19 @@ VOID StopService();
 int __cdecl main3(void);
 
 
-void mainS(int argc, _TCHAR* argv[])
+void mainS(int argc, TCHAR* argv[])
 {
 	if (argc == 1) {
-		SERVICE_TABLE_ENTRY ServiceTable[1];
+		SERVICE_TABLE_ENTRY ServiceTable[2];
 		ServiceTable[0].lpServiceName = gServiceName;
 		ServiceTable[0].lpServiceProc = (LPSERVICE_MAIN_FUNCTION)ServiceMain;
-		addLogMessage("StartSvc");
+		ServiceTable[1].lpServiceName = NULL;
+		ServiceTable[1].lpServiceProc = NULL;
 
 		if (!StartServiceCtrlDispatcher(ServiceTable)) {
-			TCHAR msg[320];
-			_tprintf_s(msg, "Error: StartServiceCtrlDispatcher: %u", GetLastError());
-			SvcReportEvent(msg);
+			TCHAR msg[80];
+			_stprintf_s(msg, _T("Error: Dispatcher: %u"), GetLastError());
+			SvcReportError(msg);
 		}
 		return;
 	}
@@ -66,7 +69,7 @@ void ServiceMain(int argc, TCHAR* argv[])
 {
 	int error;
 	int i = 0;
-	SvcReportEvent(_T("SM: started"));
+	SvcReportInfo(_T("SM: started"));
 
 	gServiceStatus.dwServiceType = SERVICE_WIN32_OWN_PROCESS;
 	gServiceStatus.dwCurrentState = SERVICE_START_PENDING;
@@ -81,9 +84,7 @@ void ServiceMain(int argc, TCHAR* argv[])
 		return;
 	}
 
-	SvcReportEvent(_T("SM: before init"));
 	error = 0;  InitService();
-	SvcReportEvent(_T("SM: after init"));
 	if (error) {
 		gServiceStatus.dwCurrentState = SERVICE_STOPPED;
 		gServiceStatus.dwWin32ExitCode = -1;
@@ -95,14 +96,15 @@ void ServiceMain(int argc, TCHAR* argv[])
 	SetServiceStatus(gStatusHandle, &gServiceStatus);
 	
 	// TODO We should check CurrentState inside main service loop
-	main3();
+	//main3();
 
+	SvcReportInfo(_T("SM: middle"));
 	while (gServiceStatus.dwCurrentState == SERVICE_RUNNING)
 	{
 		char buffer[255];
 		sprintf_s(buffer, "%u", i);
 		int result = 0; // addLogMessage(buffer);
-		//Sleep(100);
+		Sleep(100);
 		if (result)  {
 			gServiceStatus.dwCurrentState = SERVICE_STOPPED;
 			gServiceStatus.dwWin32ExitCode = -1;
@@ -112,7 +114,10 @@ void ServiceMain(int argc, TCHAR* argv[])
 		i++;
 	}
 
-	SvcReportEvent(_T("SM: end"));
+	SvcReportInfo(_T("SM: end"));		
+	gServiceStatus.dwWin32ExitCode = 0;
+	gServiceStatus.dwCurrentState = SERVICE_STOPPED;
+	SetServiceStatus(gStatusHandle, &gServiceStatus);
 	return;
 }
 
@@ -121,15 +126,14 @@ void ControlHandler(DWORD request)
 	switch (request)
 	{
 	case SERVICE_CONTROL_STOP:
-		//addLogMessage("Stopped.");
+		SvcReportInfo(_T("Handler: stop"));
 
-		gServiceStatus.dwWin32ExitCode = 0;
-		gServiceStatus.dwCurrentState = SERVICE_STOPPED;
+		gServiceStatus.dwCurrentState = SERVICE_STOP_PENDING;
 		SetServiceStatus(gStatusHandle, &gServiceStatus);
 		return;
 
 	case SERVICE_CONTROL_SHUTDOWN:
-		//addLogMessage("Shutdown.");
+		SvcReportInfo(_T("Handler: shutdown"));
 
 		gServiceStatus.dwWin32ExitCode = 0;
 		gServiceStatus.dwCurrentState = SERVICE_STOPPED;
@@ -137,11 +141,11 @@ void ControlHandler(DWORD request)
 		return;
 
 	default:
+		SvcReportInfo(_T("Handler: unknown"));
 		break;
 	}
 
 	SetServiceStatus(gStatusHandle, &gServiceStatus);
-
 	return;
 }
 
@@ -156,19 +160,21 @@ int InitService()
 	DWORD dwBytesToWrite = (DWORD)strlen(DataBuffer);
 	DWORD dwBytesWritten = 0;
 	BOOL bErrorFlag = FALSE;
-	_TCHAR *filePath = _T("C:\Data\svc.txt");
+	_TCHAR *filePath = _T("C:\Dta\svc_tmp\svc.txt");
 
 	hFile = CreateFile(filePath,                // name of the write
 		GENERIC_WRITE,          // open for writing
 		0,                      // do not share
 		NULL,                   // default security
-		CREATE_NEW,             // create new file only
+		CREATE_ALWAYS,             // create new file only
 		FILE_ATTRIBUTE_NORMAL,  // normal file
 		NULL);                  // no attr. template
 
 	if (hFile == INVALID_HANDLE_VALUE)
 	{
-		SvcReportEvent(_T("IS: create error"));
+		TCHAR msg[80];
+		_stprintf_s(msg, _T("IS: create error: %u"), GetLastError());
+		SvcReportError(msg);
 		return 1;
 	}
 
@@ -181,7 +187,7 @@ int InitService()
 
 	if (FALSE == bErrorFlag)
 	{
-		SvcReportEvent(_T("IS: write error"));
+		SvcReportError(_T("IS: write error"));
 	}
 	else
 	{
@@ -191,13 +197,13 @@ int InitService()
 			// success (WriteFile returns TRUE) should write all data as
 			// requested. This would not necessarily be the case for
 			// asynchronous writes.
-			SvcReportEvent(_T("IS: write partial"));
+			SvcReportError(_T("IS: write partial"));
 		}
 		else
 		{
 			_TCHAR msg[100];
 			//swprintf_s(msg, _T("IS: write success: %d"), dwBytesWritten);
-			SvcReportEvent(_T("IS: write success"));
+			SvcReportInfo(_T("IS: write success"));
 		}
 	}
 
@@ -205,7 +211,7 @@ int InitService()
 	return 0;
 }
 
-VOID SvcReportEvent(LPTSTR szFunction)
+VOID SvcReportEvent(unsigned type, LPTSTR szFunction)
 {
 	HANDLE hEventSource;
 	LPCTSTR lpszStrings[2];
@@ -221,7 +227,7 @@ VOID SvcReportEvent(LPTSTR szFunction)
 		lpszStrings[1] = Buffer;
 
 		ReportEvent(hEventSource,        // event log handle
-			EVENTLOG_ERROR_TYPE, // event type
+			type, // event type
 			0,                   // event category
 			0x40000103L,           // event identifier
 			NULL,                // no security identifier
