@@ -5,13 +5,11 @@
 #include <windows.h>
 #include <stdio.h>
 #include <tchar.h>
-#include <strsafe.h>
+#include "ssrv_service.h"
 
 #define addLogMessage(x) SvcReportInfo(_T(x))
-#define SvcReportError(x) SvcReportEvent(EVENTLOG_ERROR_TYPE, (x))
-#define SvcReportInfo(x) SvcReportEvent(EVENTLOG_WARNING_TYPE, (x))
 
-_TCHAR *gServiceName = _T("ConsoleVMSvc2");
+_TCHAR *gServiceName = _T("ConsoleVMSvc");
 _TCHAR *gServicePath;
 SERVICE_STATUS gServiceStatus;
 SERVICE_STATUS_HANDLE gStatusHandle;
@@ -20,13 +18,14 @@ SERVICE_STATUS_HANDLE gStatusHandle;
 void ServiceMain(int argc, TCHAR* argv[]);
 void ControlHandler(DWORD request);
 int InitService();
-VOID SvcReportEvent(unsigned type, LPTSTR szFunction);
 int StartServiceCmd();
 int RemoveService();
 int InstallService();
 VOID StopService();
+void ClosePipe();
+void CloseListen();
 
-int __cdecl main3(void);
+int ServerMain(DWORD *SvcState);
 
 
 void mainS(int argc, TCHAR* argv[])
@@ -84,7 +83,7 @@ void ServiceMain(int argc, TCHAR* argv[])
 		return;
 	}
 
-	error = 0;  InitService();
+	error = 0;  //InitService();
 	if (error) {
 		gServiceStatus.dwCurrentState = SERVICE_STOPPED;
 		gServiceStatus.dwWin32ExitCode = -1;
@@ -95,22 +94,11 @@ void ServiceMain(int argc, TCHAR* argv[])
 	gServiceStatus.dwCurrentState = SERVICE_RUNNING;
 	SetServiceStatus(gStatusHandle, &gServiceStatus);
 	
-	// TODO We should check CurrentState inside main service loop
-	//main3();
 
 	SvcReportInfo(_T("SM: middle"));
 	while (gServiceStatus.dwCurrentState == SERVICE_RUNNING)
 	{
-		char buffer[255];
-		sprintf_s(buffer, "%u", i);
-		int result = 0; // addLogMessage(buffer);
-		Sleep(100);
-		if (result)  {
-			gServiceStatus.dwCurrentState = SERVICE_STOPPED;
-			gServiceStatus.dwWin32ExitCode = -1;
-			SetServiceStatus(gStatusHandle, &gServiceStatus);
-			return;
-		}
+		ServerMain(&gServiceStatus.dwCurrentState);
 		i++;
 	}
 
@@ -130,6 +118,8 @@ void ControlHandler(DWORD request)
 
 		gServiceStatus.dwCurrentState = SERVICE_STOP_PENDING;
 		SetServiceStatus(gStatusHandle, &gServiceStatus);
+		ClosePipe();
+		CloseListen();
 		return;
 
 	case SERVICE_CONTROL_SHUTDOWN:
@@ -221,7 +211,7 @@ VOID SvcReportEvent(unsigned type, LPTSTR szFunction)
 
 	if (NULL != hEventSource)
 	{
-		StringCchPrintf(Buffer, 80, TEXT("%s"), szFunction);
+		_stprintf_s(Buffer, 80, TEXT("%s"), szFunction);
 
 		lpszStrings[0] = gServiceName;
 		lpszStrings[1] = Buffer;
@@ -238,6 +228,16 @@ VOID SvcReportEvent(unsigned type, LPTSTR szFunction)
 
 		DeregisterEventSource(hEventSource);
 	}
+}
+
+VOID SvcPrintf(unsigned type, LPTSTR format, ...)
+{
+	va_list params;
+	TCHAR message[320];
+	va_start(params, format);
+
+	_vstprintf_s(message, format, params);
+	SvcReportEvent(type, message);
 }
 
 int InstallService()

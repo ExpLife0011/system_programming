@@ -6,7 +6,6 @@
 
 int _tmain1(int argc, TCHAR *argv[]);
 int __cdecl main2(int argc, TCHAR **argv);
-int __cdecl main3(void);
 void __cdecl mainS(int argc, TCHAR *argv[]);
 
 int _tmain(int argc, _TCHAR* argv[])
@@ -16,8 +15,8 @@ int _tmain(int argc, _TCHAR* argv[])
 		return main2(argc, argv);
 	}
 	else if (argc == 2 && !_tcscmp(argv[1], _T("srv"))) {
-		_tprintf(TEXT("Server will be started \n"));
-		return main3();
+		_tprintf(TEXT("Deprecated. Use service!\n"));
+		return 1;
 	}
 	else if ((argc >= 2 ) && (!_tcscmp(argv[1], _T("srv_service")))) {
 		if (argc >= 3) {
