@@ -5,14 +5,14 @@
 #include <stdio.h>
 
 int _tmain1(int argc, TCHAR *argv[]);
-int __cdecl main2(int argc, TCHAR **argv);
+int __cdecl ClientProcess();
 void __cdecl mainS(int argc, TCHAR *argv[]);
 
 int _tmain(int argc, _TCHAR* argv[])
 {
 	if (argc == 2 && !_tcscmp(argv[1], _T("cli"))) {
 		_tprintf(TEXT("Client will be started \n"));
-		return main2(argc, argv);
+		return ClientProcess();
 	}
 	else if (argc == 2 && !_tcscmp(argv[1], _T("srv"))) {
 		_tprintf(TEXT("Deprecated. Use service!\n"));
@@ -32,7 +32,6 @@ int _tmain(int argc, _TCHAR* argv[])
 	_tprintf(TEXT("End of startings \n"));
 	//_tmain1(argc, argv);
 
-	//getchar();
 	return 0;
 }
 
