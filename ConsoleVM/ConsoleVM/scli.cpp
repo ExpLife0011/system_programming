@@ -14,7 +14,7 @@
 #define DEFAULT_PORT "27015"
 #define IP_ADDRESS "127.0.0.1"
 
-int getServerInfo(struct addrinfo * info);
+int getServerInfo(struct addrinfo ** info);
 int connectToServer(SOCKET * connSock, addrinfo * srvInfo);
 
 int __cdecl ClientProcess()
@@ -28,7 +28,7 @@ int __cdecl ClientProcess()
 	}
 
 	struct addrinfo *servInfo = NULL;
-	if (getServerInfo(servInfo) != 0) {
+	if (getServerInfo(&servInfo) != 0) {
 		printf("getServerInfo failed \n");
 		goto err05;
 	}
@@ -53,22 +53,20 @@ int __cdecl ClientProcess()
 
 	int recvRet = 0;
 	do {
+		// TODO: divide on two threads for send and recv 
 		printf("Enter command: ");
 		if (gets_s(sendbuf, DEFAULT_BUFLEN) == NULL)
 			break;
-		//printf("Buffer is: %s, Size: %d\n", sendbuf, (int)strlen(sendbuf));
-		//retValue = send(ConnectSocket, sendbuf, (int)strlen(sendbuf), 0);
+
 		if (send(ConnectSocket, sendbuf, (int)strlen(sendbuf), 0) == SOCKET_ERROR) {
 			printf("send failed with error: %d \n", WSAGetLastError());
 			goto err3;
 		}
-		//printf("Bytes Sent: %ld\n", retValue);
 
 		memset(recvbuf, 0, DEFAULT_BUFLEN);
 		recvRet = recv(ConnectSocket, recvbuf, DEFAULT_BUFLEN, 0);
 
 		if (recvRet > 0)
-			//printf("Bytes received: %d, Buffer: \n%s \n", recvRet, recvbuf);
 			printf("%s \n", recvbuf);
 		else if (recvRet == 0)
 			printf("Connection closed\n");
@@ -97,6 +95,7 @@ err05:
 err0:
 	return exitValue;
 }
+
 
 int connectToServer(SOCKET * connSock, addrinfo * srvInfo)
 {
@@ -127,7 +126,7 @@ err:
 	return 1;
 }
 
-int getServerInfo(struct addrinfo * info)
+int getServerInfo(struct addrinfo ** info)
 {
 	struct addrinfo hints;
 	ZeroMemory(&hints, sizeof(hints));
@@ -135,5 +134,5 @@ int getServerInfo(struct addrinfo * info)
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_protocol = IPPROTO_TCP;
 
-	return getaddrinfo(IP_ADDRESS, DEFAULT_PORT, &hints, &info);
+	return getaddrinfo(IP_ADDRESS, DEFAULT_PORT, &hints, info);
 }

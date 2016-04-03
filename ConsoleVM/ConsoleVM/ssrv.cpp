@@ -38,7 +38,6 @@ int TransmitToCmd(SOCKET ClientSocket);
 
 int ServerMain(DWORD *SvcState)
 {
-	WSADATA wsaData;
 	int iResult;
 
 	SOCKET ClientSocket = INVALID_SOCKET;
@@ -50,10 +49,12 @@ int ServerMain(DWORD *SvcState)
 	char * recvbuf = (char*)calloc(DEFAULT_BUFLEN, sizeof(char));
 	int recvbuflen = DEFAULT_BUFLEN;
 
+
+
 	// Initialize Winsock
-	iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
-	if (iResult != 0) {
-		printf("WSAStartup failed with error: %d\n", iResult);
+	WSADATA wsaData;
+	if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+		printf("WSAStartup failed \n");
 		return 1;
 	}
 
