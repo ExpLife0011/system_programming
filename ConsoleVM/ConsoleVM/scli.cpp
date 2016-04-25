@@ -16,6 +16,8 @@
 
 int getServerInfo(struct addrinfo ** info);
 int connectToServer(SOCKET * connSock, addrinfo * srvInfo);
+int sendToServer(SOCKET ConnectSocket);
+int recvFromServer(SOCKET ConnectSocket);
 
 int __cdecl ClientProcess()
 {
@@ -39,7 +41,7 @@ int __cdecl ClientProcess()
 		goto err1;
 	}
 
-	char *sendbuf;
+	/*char *sendbuf;
 	if ((sendbuf = (char*)calloc(DEFAULT_BUFLEN, sizeof(char))) == NULL) {
 		printf("Allocating memory for send buffer error \n");
 		goto err2;
@@ -73,7 +75,17 @@ int __cdecl ClientProcess()
 		else
 			printf("recv failed with error: %d \n", WSAGetLastError());
 
-	} while (recvRet > 0);
+	} while (recvRet > 0);*/
+
+	HANDLE hThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)recvFromServer, (LPVOID)ConnectSocket, 0, NULL);
+	if (hThread == NULL) {
+		printf("CreateThread");
+		goto err3;
+	}
+
+	sendToServer(ConnectSocket);
+
+	WaitForSingleObject(hThread, INFINITE);
 
 	if (shutdown(ConnectSocket, SD_SEND) == SOCKET_ERROR) {
 		printf("shutdown failed with error: %d\n", WSAGetLastError());
@@ -83,9 +95,9 @@ int __cdecl ClientProcess()
 	exitValue = 0;
 
 err3:
-	free(recvbuf);
+	//free(recvbuf);
 err25:
-	free(sendbuf);
+	//free(sendbuf);
 err2:
 	closesocket(ConnectSocket);
 err1:
@@ -96,6 +108,62 @@ err0:
 	return exitValue;
 }
 
+int sendToServer(SOCKET ConnectSocket)
+{
+	char *sendbuf;
+	if ((sendbuf = (char*)calloc(DEFAULT_BUFLEN, sizeof(char))) == NULL) {
+		printf("Allocating memory for send buffer error \n");
+		goto err0;
+	}
+
+	do {
+		printf("Enter command: ");
+		if (gets_s(sendbuf, DEFAULT_BUFLEN) == NULL)
+			break;
+
+		if (send(ConnectSocket, sendbuf, (int)strlen(sendbuf), 0) == SOCKET_ERROR) {
+			printf("send failed with error: %d \n", WSAGetLastError());
+			goto end;
+		}
+	} while (true);
+
+end:
+	free(sendbuf);
+	return 0;
+err0:
+	return -1;
+}
+
+int recvFromServer(SOCKET ConnectSocket)
+{
+	int recvRet;
+	char *recvbuf;
+	if ((recvbuf = (char*)calloc(DEFAULT_BUFLEN, sizeof(char))) == NULL) {
+		printf("Allocating memory for recv buffer error \n");
+		goto err0;
+	}
+
+	do {
+		memset(recvbuf, 0, DEFAULT_BUFLEN);
+		recvRet = recv(ConnectSocket, recvbuf, DEFAULT_BUFLEN, 0);
+
+		if (recvRet > 0) {
+			printf("%s \n", recvbuf);
+		} else if (recvRet == 0) {
+			printf("Connection closed\n");
+			goto end;
+		} else {
+			printf("recv failed with error: %d \n", WSAGetLastError());
+			goto end;
+		}
+	} while (recvRet > 0);
+
+end:
+	free(recvbuf);
+	return 0;
+err0:
+	return -1;
+}
 
 int connectToServer(SOCKET * connSock, addrinfo * srvInfo)
 {
