@@ -165,6 +165,7 @@ int TransmitToCmd(SOCKET ClientSocket)
 		}
 		else  {
 			SvcReportError(_T("recv failed with error: %d\n", WSAGetLastError()));
+			ClosePipe();
 			return 1;
 		}
 	} while (iResult > 0);
