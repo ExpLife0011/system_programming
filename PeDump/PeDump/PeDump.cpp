@@ -4,6 +4,7 @@
 #include "stdafx.h"
 #include "atlstr.h"
 #include <windows.h>
+#include "Mapper.h"
 
 #define ERR_RET(desc)		\
 		do {				\
@@ -99,6 +100,15 @@ err:
 
 int _tmain(int argc, _TCHAR* argv[])
 {
+	/*
+	/// Example of Mapper usage
+	Mapper map;
+	map.MapFile(TEXT("Mapper.cpp"));
+	char * ptr = (char*)map.GetMapAddress();
+	_tprintf(TEXT("%c - %c - %c - %c - %c\n"), (signed)ptr[0], ptr[1], ptr[2], ptr[3], ptr[4]);
+	map.UnmapFile();
+	*/
+
 	if (argc != 2)
 		ERR_RET("Need path argument");
 
@@ -113,5 +123,6 @@ int _tmain(int argc, _TCHAR* argv[])
 
 	fclose(fbin);
 err:
+	getchar();
 	return 0;
 }
