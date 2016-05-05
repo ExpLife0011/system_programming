@@ -10,7 +10,7 @@ public:
 	
 	bool MapFile(TCHAR * fileName);
 	bool UnmapFile();
-	LPVOID GetMapAddress();
+	char* GetMapAddress();
 
 private:
 	HANDLE m_hFile;

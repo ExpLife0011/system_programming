@@ -51,7 +51,7 @@ bool Mapper::UnmapFile()
 	return true;
 }
 
-LPVOID Mapper::GetMapAddress()
+char* Mapper::GetMapAddress()
 {
-	return m_isMaped ? m_lpMapAddress : NULL;
+	return m_isMaped ? (char*)m_lpMapAddress : NULL;
 }

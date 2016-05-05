@@ -15,80 +15,57 @@
 #define MAX_BUF_SIZE 128
 
 
-size_t GetPEOffset(FILE * fbin)
+size_t GetPEOffset(char* faddr)
 {
-	char buf[MAX_BUF_SIZE];
-
-	if (fseek(fbin, 0x3c, SEEK_SET))
-		ERR_RET("fseek error");
-	if (!fread(buf, 1, 4, fbin))
-		ERR_RET("read offset error");
-
-	return *(size_t*)buf;
-err:
-	return 0;
+	return *(int*)(faddr + 0x3c);
 }
 
-int FindPEMagic(FILE * fbin, size_t offset)
+int FindPEMagic(char* faddr, size_t* offset)
 {
-	char buf[MAX_BUF_SIZE];
-
-	if (fseek(fbin, offset, SEEK_SET))
-		ERR_RET("fseek");
-	if (!fread(buf, 1, 4, fbin))
-		ERR_RET("read signature");
-
+	char buf[5] = { 0 };
+	memcpy(buf, faddr + *offset, 4);
+	*offset += 4;
 	_tprintf(TEXT("PE header magic: %c%c%c%c => %s \n"), buf[0], buf[1], buf[2], buf[3],
 		(strncmp(buf, "PE", 4)) ? TEXT("FAIL") : TEXT("OK"));
 	return 0;
-err:
-	return -1;
 }
 
-int FindPEHead(IMAGE_FILE_HEADER * hdr, FILE * fbin, size_t offset)
+int FindPEHead(IMAGE_FILE_HEADER * hdr, char* faddr, size_t* offset)
 {
-	if (!fread(hdr, sizeof(*hdr), 1, fbin))
-		ERR_RET("read pe header");
-
+	memcpy(hdr, faddr + *offset, sizeof(*hdr));
+	*offset += sizeof(*hdr);
 	_tprintf(TEXT("machine type: 0x%x => %s \n"), hdr->Machine,
 		((hdr->Machine == 0x8664) ? TEXT("x64") : ((hdr->Machine == 0x14c) ? TEXT("x86") : TEXT("Unknown"))));
 	_tprintf(TEXT("sections number: %u\n"), hdr->NumberOfSections);
 	return 0;
-err:
-	return -1;
 }
 
-int FindSection(FILE * fbin)
+int ReadSectionNumber(char* faddr, int num)
 {
 	IMAGE_SECTION_HEADER sect_head;
-	if (!fread(&sect_head, sizeof(sect_head), 1, fbin))
-		ERR_RET("read section error");
-
+	memcpy(&sect_head, faddr + num * sizeof(sect_head), sizeof(sect_head));
 	USES_CONVERSION;
 	_tprintf(TEXT("%-8.8s -> rawsize: %u\n"), A2T((LPCSTR)sect_head.Name), sect_head.SizeOfRawData);
 	return 0;
-err:
-	return -1;
 }
 
-int PrintPEHeaders(FILE * fbin)
+int PrintPEHeaders(char* faddr)
 {
-	size_t offset = GetPEOffset(fbin);
+	size_t offset = GetPEOffset(faddr);
 	if (!offset)
 		ERR_RET("pe offset getting error");
 
-	if (FindPEMagic(fbin, offset))
+	if (FindPEMagic(faddr, &offset))
 		ERR_RET("finding pe magic error");
 
 	IMAGE_FILE_HEADER pe_head;
-	if (FindPEHead(&pe_head, fbin, offset))
+	if (FindPEHead(&pe_head, faddr, &offset))
 		ERR_RET("finding pe header error");
 
-	if (fseek(fbin, pe_head.SizeOfOptionalHeader, SEEK_CUR))
-		ERR_RET("fseeking optional header error");
+	offset += pe_head.SizeOfOptionalHeader;
 
 	for (int i = 0; i < pe_head.NumberOfSections; i++) {
-		if (FindSection(fbin))
+		if (ReadSectionNumber(faddr + offset, i))
 			ERR_RET("finding section error");
 	}
 
@@ -100,28 +77,22 @@ err:
 
 int _tmain(int argc, _TCHAR* argv[])
 {
-	/*
-	/// Example of Mapper usage
+	if (argc != 2) {
+		_tprintf(TEXT("Need path argument"));
+		goto err;
+	}
+
 	Mapper map;
-	map.MapFile(TEXT("Mapper.cpp"));
-	char * ptr = (char*)map.GetMapAddress();
-	_tprintf(TEXT("%c - %c - %c - %c - %c\n"), (signed)ptr[0], ptr[1], ptr[2], ptr[3], ptr[4]);
-	map.UnmapFile();
-	*/
+	if (!map.MapFile(argv[1])) {
+		_tprintf(TEXT("Error mapping file"));
+		goto err;
+	}
 
-	if (argc != 2)
-		ERR_RET("Need path argument");
-
-	FILE *fbin = NULL;
-	errno_t err = _tfopen_s(&fbin, argv[1], _T("r"));
-	if (err != 0)
-		ERR_RET("Error opening file");
-
-	if (PrintPEHeaders(fbin)) {
+	if (PrintPEHeaders(map.GetMapAddress())) {
 		_ftprintf(stderr, TEXT("Parser error"));
 	}
 
-	fclose(fbin);
+	map.UnmapFile();
 err:
 	getchar();
 	return 0;
