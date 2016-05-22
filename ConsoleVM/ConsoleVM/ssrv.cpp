@@ -136,7 +136,7 @@ int ServerMain(DWORD *SvcState)
 	TransmitToCmd(ClientSocket);
 
 	WaitForSingleObject(hThread, INFINITE);
-
+// close handle
 	// cleanup
 	WSACleanup();
 

@@ -116,8 +116,8 @@ int sendToServer(SOCKET ConnectSocket)
 		goto err0;
 	}
 
+	printf("Enter command: ");
 	do {
-		printf("Enter command: ");
 		if (gets_s(sendbuf, DEFAULT_BUFLEN) == NULL)
 			break;
 

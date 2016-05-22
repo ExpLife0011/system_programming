@@ -28,6 +28,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	}
 	else if (argc == 1) {
 		mainS(argc, argv);
+		// usage
  	}
 	_tprintf(TEXT("End of startings \n"));
 	//_tmain1(argc, argv);
