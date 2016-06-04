@@ -7,7 +7,7 @@
 #include <tchar.h>
 #include "ssrv_service.h"
 
-#define addLogMessage(x) SvcReportInfo(_T(x))
+#define addLogMessage(x) _tprintf(_T(x))
 
 _TCHAR *gServiceName = _T("ConsoleVMSvc");
 _TCHAR *gServicePath;
@@ -22,13 +22,11 @@ int StartServiceCmd();
 int RemoveService();
 int InstallService();
 VOID StopService();
-void ClosePipe();
-void CloseListen();
-
+int StopServer();
 int ServerMain(DWORD *SvcState);
 
 
-void mainS(int argc, TCHAR* argv[])
+int mainS(int argc, TCHAR* argv[])
 {
 	if (argc == 1) {
 		SERVICE_TABLE_ENTRY ServiceTable[2];
@@ -42,7 +40,7 @@ void mainS(int argc, TCHAR* argv[])
 			_stprintf_s(msg, _T("Error: Dispatcher: %u"), GetLastError());
 			SvcReportError(msg);
 		}
-		return;
+		return 0;
 	}
 	else if ((argc == 4) && (_tcscmp(argv[2], _T("install")) == 0)) {
 		gServicePath = argv[3];
@@ -58,17 +56,16 @@ void mainS(int argc, TCHAR* argv[])
 		StopService();
 	}
 	else {
-		_tprintf(_T("Invalid command %s\n", argv[argc - 1]));
-		return;
+		_tprintf(_T("Invalid command %s\n"), argv[argc - 1]);
+		return 1;
 	}
-	return;
+	return 0;
 }
 
 void ServiceMain(int argc, TCHAR* argv[])
 {
 	int error;
 	int i = 0;
-	SvcReportInfo(_T("SM: started"));
 
 	gServiceStatus.dwServiceType = SERVICE_WIN32_OWN_PROCESS;
 	gServiceStatus.dwCurrentState = SERVICE_START_PENDING;
@@ -83,26 +80,16 @@ void ServiceMain(int argc, TCHAR* argv[])
 		return;
 	}
 
-	error = 0;  //InitService();
-	if (error) {
-		gServiceStatus.dwCurrentState = SERVICE_STOPPED;
-		gServiceStatus.dwWin32ExitCode = -1;
-		SetServiceStatus(gStatusHandle, &gServiceStatus);
-		return;
-	}
-
 	gServiceStatus.dwCurrentState = SERVICE_RUNNING;
 	SetServiceStatus(gStatusHandle, &gServiceStatus);
 	
 
-	SvcReportInfo(_T("SM: middle"));
 	while (gServiceStatus.dwCurrentState == SERVICE_RUNNING)
 	{
 		ServerMain(&gServiceStatus.dwCurrentState);
 		i++;
 	}
 
-	SvcReportInfo(_T("SM: end"));		
 	gServiceStatus.dwWin32ExitCode = 0;
 	gServiceStatus.dwCurrentState = SERVICE_STOPPED;
 	SetServiceStatus(gStatusHandle, &gServiceStatus);
@@ -118,8 +105,7 @@ void ControlHandler(DWORD request)
 
 		gServiceStatus.dwCurrentState = SERVICE_STOP_PENDING;
 		SetServiceStatus(gStatusHandle, &gServiceStatus);
-		ClosePipe();
-		CloseListen();
+		StopServer();
 		return;
 
 	case SERVICE_CONTROL_SHUTDOWN:
@@ -296,7 +282,7 @@ int InstallService()
 	CloseServiceHandle(hService);
 
 	CloseServiceHandle(hSCManager);
-	addLogMessage("Success install service!");
+	addLogMessage("Success install service!\n");
 	return 0;
 }
 
@@ -304,12 +290,13 @@ int RemoveService()
 {
 	SC_HANDLE hSCManager = OpenSCManager(NULL, NULL, SC_MANAGER_ALL_ACCESS);
 	if (!hSCManager) {
-		addLogMessage("Error: Can't open Service Control Manager");
+		addLogMessage("Error: Can't open Service Control Manager\n");
+		addLogMessage("Admin rights are necessary\n");
 		return -1;
 	}
 	SC_HANDLE hService = OpenService(hSCManager, gServiceName, SERVICE_STOP | DELETE);
 	if (!hService) {
-		addLogMessage("Error: Can't remove service");
+		addLogMessage("Error: Can't open service\n");
 		CloseServiceHandle(hSCManager);
 		return -1;
 	}
@@ -317,20 +304,34 @@ int RemoveService()
 	DeleteService(hService);
 	CloseServiceHandle(hService);
 	CloseServiceHandle(hSCManager);
-	addLogMessage("Success remove service!");
+	addLogMessage("Success remove service!\n");
 	return 0;
 }
 
 int StartServiceCmd()
 {
 	SC_HANDLE hSCManager = OpenSCManager(NULL, NULL, SC_MANAGER_CREATE_SERVICE);
+	if (!hSCManager) {
+		addLogMessage("Error: Can't open Service Control Manager\n");
+		addLogMessage("Admin rights are necessary\n");
+		return -1;
+	}
+
 	SC_HANDLE hService = OpenService(hSCManager, gServiceName, SERVICE_START);
+	if (!hService) {
+		addLogMessage("Error: Can't open service\n");
+		addLogMessage("Service should be installed firstly\n");
+		CloseServiceHandle(hSCManager);
+		return -1;
+	}
+
 	if (!StartService(hService, 0, NULL)) {
 		CloseServiceHandle(hSCManager);
 		addLogMessage("Error: Can't start service");
 		return -1;
 	}
 
+	addLogMessage("Success start service!\n");
 	CloseServiceHandle(hService);
 	CloseServiceHandle(hSCManager);
 	return 0;
@@ -347,7 +348,8 @@ VOID StopService()
 		SC_MANAGER_ALL_ACCESS);  // full access rights 
 	if (NULL == schSCManager)
 	{
-		printf("OpenSCManager failed (%d)\n", GetLastError());
+		addLogMessage("Error: Can't open Service Control Manager\n");
+		addLogMessage("Admin rights are necessary\n");
 		return;
 	}
 
@@ -360,7 +362,8 @@ VOID StopService()
 		SERVICE_ENUMERATE_DEPENDENTS);
 	if (schService == NULL)
 	{
-		printf("OpenService failed (%d)\n", GetLastError());
+		addLogMessage("Error: Can't open service\n");
+		addLogMessage("Service should be installed firstly\n");
 		CloseServiceHandle(schSCManager);
 		return;
 	}
@@ -371,9 +374,11 @@ VOID StopService()
 		SERVICE_CONTROL_STOP,
 		(LPSERVICE_STATUS)&ssp))
 	{
-		printf("ControlService failed (%d)\n", GetLastError());
+		addLogMessage("ControlService failed\n");
+		addLogMessage("Service may be not started\n");
 		goto stop_cleanup;
 	}
+	addLogMessage("Success stop service!\n");
 
 stop_cleanup:
 	CloseServiceHandle(schService);
