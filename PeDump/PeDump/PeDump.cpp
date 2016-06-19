@@ -266,15 +266,15 @@ int _tmain(int argc, _TCHAR* argv[])
 {
 	if (argc != 2) {
 		_tprintf(TEXT("Need path argument"));
-		goto err;
+		return 0;
 	}
 
-	Mapper map;
 	struct PEFileInfo peinfo;
 	ZeroMemory(&peinfo, sizeof(peinfo));
 
-	if (!map.MapFile(argv[1])) {
-		_tprintf(TEXT("Error mapping file"));
+	Mapper map(argv[1]);
+	if (!map.MapFile()) {
+		_tprintf(TEXT("Error mapping file \n"));
 		goto err;
 	}
 	peinfo.base = map.GetMapAddress();
