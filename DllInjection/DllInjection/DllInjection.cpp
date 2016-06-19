@@ -22,6 +22,10 @@ BOOL RemoteFreeMemory(PROCESS_INFORMATION pi, void* baseAddr);
 SIZE_T RemoteWriteMemory(PROCESS_INFORMATION pi, void* baseAddr, void* dataAddr, SIZE_T dataLen);
 HANDLE RemoteCreateThread(PROCESS_INFORMATION pi, void* addr);
 
+struct shellcode_t {
+	char bytecode[];
+} shellcode = { { 0x90, 0x90, 0x90, 0x90, 0x90, 0xC3 } };
+
 int _tmain(int argc, _TCHAR* argv[])
 {
 	if (argc != 2) {
