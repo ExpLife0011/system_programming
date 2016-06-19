@@ -6,6 +6,7 @@
 
 int _tmain(int argc, _TCHAR* argv[])
 {
+	while (true);
 	_tprintf(_T("Hello from TestExe.exe! \n"));
 	return 0;
 }

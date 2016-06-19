@@ -14,6 +14,21 @@
 
 typedef unsigned int u32_t;
 
+typedef NTSTATUS(WINAPI* FuncNtQueryInformationProcess)(
+	HANDLE ProcessHandle,
+	PROCESSINFOCLASS ProcessInformationClass,
+	PVOID ProcessInformation,
+	ULONG ProcessInformationLength,
+	PULONG ReturnLength);
+
+typedef NTSTATUS(NTAPI *_NtQueryInformationProcess)(
+	IN HANDLE ProcessHandle,
+	ULONG ProcessInformationClass,
+	OUT PVOID ProcessInformation,
+	IN ULONG ProcessInformationLength,
+	OUT PULONG ReturnLength OPTIONAL
+	);
+
 bool CreateSuspendedProcess(_TCHAR* cmd, PROCESS_INFORMATION* pi);
 bool ResumeSuspendedProcess(PROCESS_INFORMATION pi);
 void WaitForProcess(PROCESS_INFORMATION pi);
@@ -22,8 +37,12 @@ BOOL RemoteFreeMemory(PROCESS_INFORMATION pi, void* baseAddr);
 SIZE_T RemoteWriteMemory(PROCESS_INFORMATION pi, void* baseAddr, void* dataAddr, SIZE_T dataLen);
 HANDLE RemoteCreateThread(PROCESS_INFORMATION pi, void* addr);
 
+void* FindKernel32AddressX86(PROCESS_INFORMATION pi); // ok for 32(main) - 32(susp)
+void* FindKernel32AddressX64(PROCESS_INFORMATION pi); // ok for 64 - looking for argv
+void* FindKernel32AddressSelf(PROCESS_INFORMATION pi); // ok for self, fail for remote (x64)
+
 struct shellcode_t {
-	char bytecode[];
+	char bytecode[6];
 } shellcode = { { 0x90, 0x90, 0x90, 0x90, 0x90, 0xC3 } };
 
 int _tmain(int argc, _TCHAR* argv[])
@@ -39,10 +58,12 @@ int _tmain(int argc, _TCHAR* argv[])
 		return 0;
 	}
 
+	// if wow than x86 else x64
 	BOOL wow;
 	IsWow64Process(pi.hProcess, &wow);
-	if (wow) printf("WOW \n"); // if wow than x86 else x64
+	if (wow) printf("WOW \n");
 
+	// allocating memory in remote process
 	SIZE_T size = 512;
 	void* baseAddr = RemoteAllocateMemory(pi, size);
 	if (baseAddr == NULL) {
@@ -50,11 +71,26 @@ int _tmain(int argc, _TCHAR* argv[])
 		goto err0;
 	}
 
-	// example of writing memory
-	int data[20];
-	SIZE_T ret = RemoteWriteMemory(pi, baseAddr, data, 20 * sizeof(int));
+	// writing shellcode to remote process
+	SIZE_T ret = RemoteWriteMemory(pi, baseAddr, &shellcode, sizeof(shellcode));
 	printf("Written bytes %d \n", ret);
 	
+	// creating remote thread for nop-shellode execution
+	HANDLE hThr = RemoteCreateThread(pi, baseAddr);
+	if (hThr == NULL) {
+		printf("Error creating remote thread: 0x%x \n", GetLastError());
+		goto err1;
+	}
+
+	// waiting for end of nop-shwllcode execution
+	ret = WaitForSingleObject(hThr, INFINITE);
+	printf("WFSO ret %d \n", ret);
+	ret = CloseHandle(hThr);
+	printf("CH ret %d \n", ret);
+
+	// find kernel32.dll base address
+	void* kernel32Base = FindKernel32AddressSelf(pi);
+	printf("Kernel32 base address: %p \n", kernel32Base);
 
 err1:
 	if (!RemoteFreeMemory(pi, baseAddr)) {
@@ -108,7 +144,7 @@ bool CreateSuspendedProcess(_TCHAR* cmd, PROCESS_INFORMATION* pi)
 		NULL,           // Process handle not inheritable
 		NULL,           // Thread handle not inheritable
 		FALSE,          // Set handle inheritance to FALSE
-		CREATE_SUSPENDED,	// Flag: create suspended process until ResumeThread
+		0,	// Flag: create suspended process until ResumeThread
 		NULL,           // Use parent's environment block
 		NULL,           // Use parent's starting directory 
 		&si,            // Pointer to STARTUPINFO structure
@@ -128,4 +164,193 @@ void WaitForProcess(PROCESS_INFORMATION pi)
 	// Close process and thread handles. 
 	CloseHandle(pi.hProcess);
 	CloseHandle(pi.hThread);
+}
+
+void* FindKernel32AddressX86(PROCESS_INFORMATION pi)
+{
+	FuncNtQueryInformationProcess ntqip = (FuncNtQueryInformationProcess)GetProcAddress(GetModuleHandle(TEXT("ntdll.dll")), "NtQueryInformationProcess");
+	PROCESS_BASIC_INFORMATION info;
+
+	NTSTATUS status = ntqip(
+		pi.hProcess,				// ProcessHandle
+		ProcessBasicInformation,	// ProcessInformationClass
+		&info,						// ProcessInformation
+		sizeof(info),				// ProcessInformationLength
+		0);							// ReturnLength
+
+	if (NT_SUCCESS(status)) {
+		_tprintf(TEXT("Success getting process info \n"));
+		PPEB peb = (PPEB)info.PebBaseAddress;
+		//DWORD k32 = (DWORD)peb->Ldr->InMemoryOrderModuleList.Flink[0].Flink->Flink + 0x10;
+		//return *(void **)k32;
+
+		// info about all dlls
+		void* Ldr = *((void **)((unsigned char *)peb + 0x0c));
+		void* Flink = *((void **)((unsigned char *)Ldr + 0x0c));
+		void* p = Flink;
+		do
+		{
+		void* BaseAddress = *((void **)((unsigned char *)p + 0x18));
+		void* FullDllName = *((void **)((unsigned char *)p + 0x28));
+		wprintf(L"FullDllName is %s\n", FullDllName);
+		printf("BaseAddress is %x\n", BaseAddress);
+		printf("P is %p \n", p);
+		p = *((void **)p);
+		} while (Flink != p);
+	}
+	else {
+		_tprintf(TEXT("Error getting process info \n"));
+		return NULL;
+	}
+	return NULL;
+}
+
+void* FindKernel32AddressX64(PROCESS_INFORMATION pi)
+{
+
+	// open the process
+	HANDLE hProcess = pi.hProcess;
+	DWORD err = 0;
+
+	// determine if 64 or 32-bit processor
+	SYSTEM_INFO si;
+	GetNativeSystemInfo(&si);
+
+	// determine if this process is running on WOW64
+	BOOL wow;
+	IsWow64Process(GetCurrentProcess(), &wow);
+
+	// use WinDbg "dt ntdll!_PEB" command and search for ProcessParameters offset to find the truth out
+	DWORD ProcessParametersOffset = si.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64 ? 0x20 : 0x10;
+	DWORD CommandLineOffset = si.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64 ? 0x70 : 0x40;
+
+	// read basic info to get ProcessParameters address, we only need the beginning of PEB
+	DWORD pebSize = ProcessParametersOffset + 8;
+	PBYTE peb = (PBYTE)malloc(pebSize);
+	ZeroMemory(peb, pebSize);
+
+	// read basic info to get CommandLine address, we only need the beginning of ProcessParameters
+	DWORD ppSize = CommandLineOffset + 16;
+	PBYTE pp = (PBYTE)malloc(ppSize);
+	ZeroMemory(pp, ppSize);
+
+	PWSTR cmdLine = NULL;
+
+	// we're running as a 32-bit process in a 32-bit OS, or as a 64-bit process in a 64-bit OS
+	PROCESS_BASIC_INFORMATION pbi;
+	ZeroMemory(&pbi, sizeof(pbi));
+
+	// get process information
+	_NtQueryInformationProcess query = (_NtQueryInformationProcess)GetProcAddress(GetModuleHandleA("ntdll.dll"), "NtQueryInformationProcess");
+	err = query(hProcess, 0, &pbi, sizeof(pbi), NULL);
+	if (err != 0)
+	{
+		printf("NtQueryInformationProcess failed\n");
+		return NULL;
+	}
+
+	// read PEB
+	if (!ReadProcessMemory(hProcess, pbi.PebBaseAddress, peb, pebSize, NULL))
+	{
+		printf("ReadProcessMemory PEB failed\n");
+		return NULL;
+	}
+
+	typedef struct _PEB64 {
+		BYTE Reserved1[2];
+		BYTE BeingDebugged;
+		BYTE Reserved2[21];
+		PPEB_LDR_DATA LoaderData;
+		PRTL_USER_PROCESS_PARAMETERS ProcessParameters;
+		BYTE Reserved3[520];
+		PPS_POST_PROCESS_INIT_ROUTINE PostProcessInitRoutine;
+		BYTE Reserved4[136];
+		ULONG SessionId;
+	} PEB64, *PPEB64;
+
+	PPEB ppeb = (PPEB)peb;
+
+	PBYTE* ldr = (PBYTE*)*(LPVOID*)(peb + 24); // address in remote process adress space
+	if (!ReadProcessMemory(hProcess, ldr, pp, ppSize, NULL))
+	{
+		printf("ReadProcessMemory Loader failed %d\n", GetLastError());
+		return NULL;
+	}
+
+	// read ProcessParameters
+	PBYTE* parameters = (PBYTE*)*(LPVOID*)(peb + ProcessParametersOffset); // address in remote process adress space
+	if (!ReadProcessMemory(hProcess, parameters, pp, ppSize, NULL))
+	{
+		printf("ReadProcessMemory Parameters failed\n");
+		return NULL;
+	}
+
+	// read CommandLine
+	UNICODE_STRING* pCommandLine = (UNICODE_STRING*)(pp + CommandLineOffset);
+	cmdLine = (PWSTR)malloc(pCommandLine->MaximumLength);
+	if (!ReadProcessMemory(hProcess, pCommandLine->Buffer, cmdLine, pCommandLine->MaximumLength, NULL))
+	{
+		printf("ReadProcessMemory Parameters failed\n");
+		return NULL;
+	}
+	printf("%S\n", cmdLine);
+
+	return NULL;
+}
+
+void* FindKernel32AddressSelf(PROCESS_INFORMATION pi)
+{
+	FuncNtQueryInformationProcess ntqip = (FuncNtQueryInformationProcess)GetProcAddress(GetModuleHandle(TEXT("ntdll.dll")), "NtQueryInformationProcess");
+	PROCESS_BASIC_INFORMATION info;
+	HANDLE hProcess = GetCurrentProcess();
+	HANDLE hProcess1 = pi.hProcess;
+
+	NTSTATUS status = ntqip(
+		hProcess,					// ProcessHandle
+		ProcessBasicInformation,	// ProcessInformationClass
+		&info,						// ProcessInformation
+		sizeof(info),				// ProcessInformationLength
+		0);							// ReturnLength
+
+	if (NT_SUCCESS(status)) {
+		_tprintf(TEXT("Success getting process info \n"));
+		PPEB ppeb = (PPEB)info.PebBaseAddress;
+
+		struct LDR_MODULE
+		{
+			LIST_ENTRY e[3];
+			HMODULE    base;
+			void      *entry;
+			UINT       size;
+			UNICODE_STRING dllPath;
+			UNICODE_STRING dllname;
+		};
+		int ModuleList = 0x18;
+		int ModuleListFlink = 0x18;
+		int KernelBaseAddr = 0x10;
+
+		INT_PTR peb = (INT_PTR)ppeb;
+		INT_PTR mdllist = *(INT_PTR*)(peb + ModuleList);
+		INT_PTR mlink = *(INT_PTR*)(mdllist + ModuleListFlink);
+		INT_PTR krnbase = *(INT_PTR*)(mlink + KernelBaseAddr);
+
+		LDR_MODULE *mdl = (LDR_MODULE*)mlink;
+		do
+		{
+			mdl = (LDR_MODULE*)mdl->e[0].Flink;
+
+			if (mdl->base != NULL)
+			{
+				if (!lstrcmpiW(mdl->dllname.Buffer, L"kernel32.dll"))
+				{
+					return mdl->base;
+				}
+			}
+		} while (mlink != (INT_PTR)mdl);
+	}
+	else {
+		_tprintf(TEXT("Error getting process info \n"));
+		return NULL;
+	}
+	return NULL;
 }
