@@ -3,11 +3,11 @@
 #define WIN32_LEAN_AND_MEAN
 
 #include "stdafx.h"
+#include "ssrv_service.h"
 #include <windows.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <strsafe.h>
-#include "ssrv_service.h"
 
 // Need to link with Ws2_32.lib
 #pragma comment (lib, "Ws2_32.lib")
@@ -17,6 +17,16 @@
 #define DEFAULT_PORT "27015"
 #define BUFSIZE 4096 
 
+void CreateChildProcess(void);
+DWORD WINAPI WriteToPipe(char *msgBuf);
+DWORD ReadFromPipe(char *pMsgBuf, int *pMsgBufLen);
+void ErrorExit(PTSTR);
+int InitPipe();
+void ClosePipes();
+void CloseListen();
+int TransmitFromCmd(void* buf);
+int TransmitToCmd(SOCKET ClientSocket);
+
 HANDLE g_hChildStd_IN_Rd = NULL;
 HANDLE g_hChildStd_IN_Wr = NULL;
 HANDLE g_hChildStd_OUT_Rd = NULL;
@@ -25,15 +35,7 @@ HANDLE g_hChildStd_OUT_Wr = NULL;
 HANDLE g_hInputFile = NULL;
 SOCKET gListenSocket = INVALID_SOCKET;
 
-void CreateChildProcess(void);
-DWORD WINAPI WriteToPipe(char * msgBuf);
-DWORD ReadFromPipe(char ** pMsgBuf, int * pMsgBufLen);
-void ErrorExit(PTSTR);
-int InitPipe();
-void ClosePipe();
-void CloseListen();
-int TransmitFromCmd(void* buf);
-int TransmitToCmd(SOCKET ClientSocket);
+int gStopFlag = 0;
 
 
 int ServerMain(DWORD *SvcState)
@@ -48,8 +50,7 @@ int ServerMain(DWORD *SvcState)
 	int iSendResult;
 	char * recvbuf = (char*)calloc(DEFAULT_BUFLEN, sizeof(char));
 	int recvbuflen = DEFAULT_BUFLEN;
-
-
+	gStopFlag = 0;
 
 	// Initialize Winsock
 	WSADATA wsaData;
@@ -136,7 +137,8 @@ int ServerMain(DWORD *SvcState)
 	TransmitToCmd(ClientSocket);
 
 	WaitForSingleObject(hThread, INFINITE);
-// close handle
+	CloseHandle(hThread);
+
 	// cleanup
 	WSACleanup();
 
@@ -146,29 +148,39 @@ int ServerMain(DWORD *SvcState)
 int TransmitToCmd(SOCKET ClientSocket)
 {
 	int iResult, iSendResult;
-	char * recvbuf = (char*)calloc(DEFAULT_BUFLEN, sizeof(char));
+	char *recvbuf = (char*)calloc(DEFAULT_BUFLEN, sizeof(char));
 	int recvbuflen = DEFAULT_BUFLEN;
 
 	do {
 		memset(recvbuf, 0, DEFAULT_BUFLEN);
-		iResult = recv(ClientSocket, recvbuf, recvbuflen, 0);
+		iResult = recv(ClientSocket, recvbuf, recvbuflen - 3, 0);
 		if (iResult > 0) {
 			printf("Bytes received: %d, Buffer: %s\n", iResult, recvbuf);
 
 			recvbuf[iResult] = '\r';
 			recvbuf[iResult + 1] = '\n';
+			recvbuf[iResult + 2] = '\0';
 			WriteToPipe(recvbuf);
 		}
 		else if (iResult == 0){
 			SvcReportInfo(_T("Connection closing...\n"));
-			ClosePipe();
+			gStopFlag = 1;
+			ClosePipes();
 		}
-		else  {
-			SvcReportError(_T("recv failed with error: %d\n", WSAGetLastError()));
-			ClosePipe();
+		else if (!gStopFlag){
+			int err = WSAGetLastError();
+			if (err == WSAECONNRESET)
+				SvcReportInfo(_T("Connection suddenly closed by client\n"));
+			else
+				SvcReportError(_T("recv failed with error: %d\n"), err);
+			gStopFlag = 1;
+			ClosePipes();
+			free(recvbuf);
 			return 1;
 		}
 	} while (iResult > 0);
+
+	free(recvbuf);
 	return 0;
 }
 
@@ -176,21 +188,26 @@ int TransmitFromCmd(void* buf)
 {
 	SOCKET ClientSocket = (SOCKET)buf;
 	int iResult, iSendResult;
-	char * recvbuf = (char*)calloc(DEFAULT_BUFLEN, sizeof(char));
+	char *recvbuf = (char*)calloc(DEFAULT_BUFLEN, sizeof(char));
 	int recvbuflen = DEFAULT_BUFLEN;
 
 	do {
-		if (ReadFromPipe(&recvbuf, &recvbuflen)){
+		if (ReadFromPipe(recvbuf, &recvbuflen)){
+			if (!gStopFlag){
+				SvcReportError(_T("Pipe closed error"));
+			}
 			closesocket(ClientSocket);
-			SvcReportError(_T("Pipe closed error"));
+			free(recvbuf);
 			return 1;
 		}
 		// mb need more than one read-send operations for large output
 		iSendResult = send(ClientSocket, recvbuf, recvbuflen, 0);
 		printf("Bytes sent: %d\n", iSendResult);
 		if (iSendResult == SOCKET_ERROR) {
+			// TODO do we need stop check?
 			printf("send failed with error: %d\n", WSAGetLastError());
 			closesocket(ClientSocket);
+			free(recvbuf);
 			return 1;
 		}
 	} while (iSendResult != SOCKET_ERROR);
@@ -236,7 +253,7 @@ int InitPipe()
 	return 0;
 }
 
-void ClosePipe()
+void ClosePipes()
 {
 	CloseHandle(g_hChildStd_OUT_Wr);
 	g_hChildStd_OUT_Wr = NULL;
@@ -308,23 +325,24 @@ void CreateChildProcess()
 DWORD WINAPI WriteToPipe(char * msgBuf)
 {
 	DWORD dwWritten;
-	HANDLE hParentStdIn = GetStdHandle(STD_INPUT_HANDLE);
-
-	printf("WTP: %s, Len = %d\n", msgBuf, strlen(msgBuf));
-
 	WriteFile(g_hChildStd_IN_Wr, msgBuf, (DWORD)strlen(msgBuf), &dwWritten, NULL);
-
 	return 0;
 }
 
-DWORD ReadFromPipe(char ** pMsgBuf, int * pMsgBufLen)
+DWORD ReadFromPipe(char * pMsgBuf, int * pMsgBufLen)
 {
 	DWORD dwRead = 0, ret = 0;
-	HANDLE hParentStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
-
-	ret = ReadFile(g_hChildStd_OUT_Rd, *pMsgBuf, BUFSIZE, &dwRead, NULL);
+	ret = ReadFile(g_hChildStd_OUT_Rd, pMsgBuf, BUFSIZE, &dwRead, NULL);
 	*pMsgBufLen = (int)dwRead;
 	return !ret;
+}
+
+int StopServer()
+{
+	gStopFlag = 1;
+	ClosePipes();
+	CloseListen();
+	return 0;
 }
 
 void ErrorExit(PTSTR lpszFunction)

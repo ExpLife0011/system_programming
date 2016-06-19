@@ -148,7 +148,7 @@ int recvFromServer(SOCKET ConnectSocket)
 		recvRet = recv(ConnectSocket, recvbuf, DEFAULT_BUFLEN, 0);
 
 		if (recvRet > 0) {
-			printf("%s \n", recvbuf);
+			printf("%.*s", recvRet, recvbuf);
 		} else if (recvRet == 0) {
 			printf("Connection closed\n");
 			goto end;
