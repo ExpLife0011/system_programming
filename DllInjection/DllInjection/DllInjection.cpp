@@ -41,9 +41,14 @@ void* FindKernel32AddressX86(PROCESS_INFORMATION pi); // ok for 32(main) - 32(su
 void* FindKernel32AddressX64(PROCESS_INFORMATION pi); // ok for 64 - looking for argv
 void* FindKernel32AddressSelf(PROCESS_INFORMATION pi); // ok for self, fail for remote (x64)
 
-struct shellcode_t {
-	char bytecode[6];
-} shellcode = { { 0x90, 0x90, 0x90, 0x90, 0x90, 0xC3 } };
+struct sc_data_t {
+	char libName[16];
+	void* ploadLibrary;
+	UINT32 a, b, c;
+	UINT32 reserved;
+};
+
+char sc_bytecode[] = { 0x90, 0x90, 0x90, 0x90, 0x90, 0xC3 };
 
 int _tmain(int argc, _TCHAR* argv[])
 {
@@ -71,12 +76,16 @@ int _tmain(int argc, _TCHAR* argv[])
 		goto err0;
 	}
 
+	sc_data_t sc_data;
+	
 	// writing shellcode to remote process
-	SIZE_T ret = RemoteWriteMemory(pi, baseAddr, &shellcode, sizeof(shellcode));
+	SIZE_T ret = RemoteWriteMemory(pi, baseAddr, &sc_data, sizeof(sc_data_t));
+	printf("Written bytes %d \n", ret);
+	ret = RemoteWriteMemory(pi, (char*)baseAddr + sizeof(sc_data_t), &sc_bytecode, sizeof(sc_bytecode));
 	printf("Written bytes %d \n", ret);
 	
 	// creating remote thread for nop-shellode execution
-	HANDLE hThr = RemoteCreateThread(pi, baseAddr);
+	HANDLE hThr = RemoteCreateThread(pi, (char*)baseAddr + sizeof(sc_data_t));
 	if (hThr == NULL) {
 		printf("Error creating remote thread: 0x%x \n", GetLastError());
 		goto err1;
@@ -91,6 +100,8 @@ int _tmain(int argc, _TCHAR* argv[])
 	// find kernel32.dll base address
 	void* kernel32Base = FindKernel32AddressSelf(pi);
 	printf("Kernel32 base address: %p \n", kernel32Base);
+
+	printf("LoadLibrary: 0x%x\n", *(unsigned*)((char*)kernel32Base));
 
 err1:
 	if (!RemoteFreeMemory(pi, baseAddr)) {
