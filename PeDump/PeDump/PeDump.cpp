@@ -60,17 +60,17 @@ size_t GetPEOffset(char* faddr)
 	return *(int*)(faddr + 0x3c);
 }
 
-int FindPEMagic(char* faddr, size_t* offset)
+int CheckPEMagic(char* faddr, size_t* offset)
 {
 	char buf[5] = { 0 };
 	memcpy(buf, faddr + *offset, 4);
 	*offset += 4;
 	_tprintf(TEXT("PE header magic: %c%c%c%c => %s \n"), buf[0], buf[1], buf[2], buf[3],
-		(strncmp(buf, "PE", 4)) ? TEXT("FAIL") : TEXT("OK"));
+		(memcmp(buf, "PE\0\0", 4)) ? TEXT("FAIL") : TEXT("OK"));
 	return 0;
 }
 
-int FindPEHead(IMAGE_FILE_HEADER * hdr, char* faddr, size_t* offset, struct PEFileInfo* peinfo)
+int CheckPEHead(IMAGE_FILE_HEADER * hdr, char* faddr, size_t* offset, struct PEFileInfo* peinfo)
 {
 	memcpy(hdr, faddr + *offset, sizeof(*hdr));
 	*offset += sizeof(*hdr);
@@ -82,7 +82,7 @@ int FindPEHead(IMAGE_FILE_HEADER * hdr, char* faddr, size_t* offset, struct PEFi
 	return 0;
 }
 
-int ReadSectionNumber(char* faddr, int num, struct PEFileInfo* peinfo)
+int ReadSectionByNumber(char* faddr, int num, struct PEFileInfo* peinfo)
 {
 	IMAGE_SECTION_HEADER sect_head;
 	memcpy(&sect_head, faddr + num * sizeof(sect_head), sizeof(sect_head));
@@ -92,29 +92,27 @@ int ReadSectionNumber(char* faddr, int num, struct PEFileInfo* peinfo)
 	return 0;
 }
 
-int PrintPEHeaders(char* faddr, struct PEFileInfo* peinfo)
+int PrintSections(char* faddr, struct PEFileInfo* peinfo)
 {
 	size_t offset = GetPEOffset(faddr);
 	if (!offset)
 		ERR_RET("pe offset getting error");
 
-	if (FindPEMagic(faddr, &offset))
-		ERR_RET("finding pe magic error");
+	if (CheckPEMagic(faddr, &offset))
+		ERR_RET("checking pe magic error");
 
 	IMAGE_FILE_HEADER pe_head;
-	if (FindPEHead(&pe_head, faddr, &offset, peinfo))
-		ERR_RET("finding pe header error");
+	if (CheckPEHead(&pe_head, faddr, &offset, peinfo))
+		ERR_RET("checking pe header error");
 	
 	IMAGE_DATA_DIRECTORY* pdir;
 	int numberDir;
-	if (peinfo->machine == IMAGE_FILE_MACHINE_AMD64){
+	if (peinfo->machine == IMAGE_FILE_MACHINE_AMD64) {
 		IMAGE_OPTIONAL_HEADER64 opt_head;
 		memcpy(&opt_head, faddr + offset, sizeof(opt_head));
 		pdir = opt_head.DataDirectory;
 		numberDir = opt_head.NumberOfRvaAndSizes;
-	}
-	else
-	{
+	} else {
 		IMAGE_OPTIONAL_HEADER32 opt_head;
 		memcpy(&opt_head, faddr + offset, sizeof(opt_head));
 		pdir = opt_head.DataDirectory;
@@ -122,7 +120,7 @@ int PrintPEHeaders(char* faddr, struct PEFileInfo* peinfo)
 	}
 	peinfo->importRVA = pdir[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress;
 	peinfo->exportRVA = pdir[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
-	if (numberDir >= IMAGE_DIRECTORY_ENTRY_EXCEPTION){
+	if (numberDir >= IMAGE_DIRECTORY_ENTRY_EXCEPTION) {
 		peinfo->exceptionSize = pdir[IMAGE_DIRECTORY_ENTRY_EXCEPTION].Size;
 		peinfo->exceptionRVA = pdir[IMAGE_DIRECTORY_ENTRY_EXCEPTION].VirtualAddress;
 	}
@@ -132,7 +130,7 @@ int PrintPEHeaders(char* faddr, struct PEFileInfo* peinfo)
 	peinfo->num_sect = pe_head.NumberOfSections;
 
 	for (int i = 0; i < pe_head.NumberOfSections; i++) {
-		if (ReadSectionNumber(peinfo->sections, i, peinfo))
+		if (ReadSectionByNumber(peinfo->sections, i, peinfo))
 			ERR_RET("finding section error");
 	}
 
@@ -140,7 +138,6 @@ int PrintPEHeaders(char* faddr, struct PEFileInfo* peinfo)
 err:
 	return -1;
 }
-
 
 char* ConvertRVA(struct PEFileInfo* peinfo, DWORD rvaddr)
 {
@@ -235,7 +232,7 @@ int PrintExceptions(struct PEFileInfo* peinfo)
 }
 
 
-int PrintSections(char* faddr, struct PEFileInfo* peinfo)
+int PrintFunctionTables(char* faddr, struct PEFileInfo* peinfo)
 {
 	if (peinfo->importRVA){
 		_tprintf(_T("===Import dump===\n"));
@@ -279,12 +276,12 @@ int _tmain(int argc, _TCHAR* argv[])
 	}
 	peinfo.base = map.GetMapAddress();
 
-	if (PrintPEHeaders(map.GetMapAddress(), &peinfo)) {
+	if (PrintSections(map.GetMapAddress(), &peinfo)) {
 		_ftprintf(stderr, TEXT("Parser error"));
 	}
 
-	if (PrintSections(map.GetMapAddress(), &peinfo)) {
-		_ftprintf(stderr, TEXT("Print sections error"));
+	if (PrintFunctionTables(map.GetMapAddress(), &peinfo)) {
+		_ftprintf(stderr, TEXT("Print tables error"));
 	}
 
 	map.UnmapFile();
