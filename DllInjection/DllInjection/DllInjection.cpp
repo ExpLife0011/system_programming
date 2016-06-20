@@ -48,7 +48,11 @@ struct sc_data_t {
 	UINT32 reserved;
 };
 
-char sc_bytecode[] = { 0x90, 0x90, 0x90, 0x90, 0x90, 0xC3 };
+char sc_bytecode[] = { 0xE8, 0x20, 0x00, 0x00, 0x00, 0x4C, 0x8B, 0xE4, 0x48, 0x83, 0xEC,
+					   0x28, 0x48, 0x83, 0xE4, 0xF0, 0x53, 0x48, 0x83,
+					   0xE8, 0x28, 0x50, 0x48, 0x8B, 0xC8, 0x48, 0x8B,
+					   0x50, 0x10, 0xFF, 0xD2, 0x5B, 0x5B, 0x49, 0x8B, 0xE4, 0xC3, 0x48,
+					   0x8B, 0x04, 0x24, 0x48, 0x83, 0xE8, 0x05, 0xC3 };
 
 int _tmain(int argc, _TCHAR* argv[])
 {
@@ -77,6 +81,9 @@ int _tmain(int argc, _TCHAR* argv[])
 	}
 
 	sc_data_t sc_data;
+	strcpy_s(sc_data.libName, "keyiso.dll");
+	printf("%s\n", sc_data.libName);
+	sc_data.ploadLibrary = (void*)0x000007FD9F883ABC;
 	
 	// writing shellcode to remote process
 	SIZE_T ret = RemoteWriteMemory(pi, baseAddr, &sc_data, sizeof(sc_data_t));
@@ -84,6 +91,8 @@ int _tmain(int argc, _TCHAR* argv[])
 	ret = RemoteWriteMemory(pi, (char*)baseAddr + sizeof(sc_data_t), &sc_bytecode, sizeof(sc_bytecode));
 	printf("Written bytes %d \n", ret);
 	
+	//LoadLibraryA("keyiso.dll");
+
 	// creating remote thread for nop-shellode execution
 	HANDLE hThr = RemoteCreateThread(pi, (char*)baseAddr + sizeof(sc_data_t));
 	if (hThr == NULL) {
@@ -100,8 +109,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	// find kernel32.dll base address
 	void* kernel32Base = FindKernel32AddressSelf(pi);
 	printf("Kernel32 base address: %p \n", kernel32Base);
-
-	printf("LoadLibrary: 0x%x\n", *(unsigned*)((char*)kernel32Base));
+	printf("LoadLibrary: 0x%p\n", &LoadLibraryA);
 
 err1:
 	if (!RemoteFreeMemory(pi, baseAddr)) {

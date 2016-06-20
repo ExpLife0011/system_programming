@@ -54,8 +54,19 @@ min2 PROC
 	nop
 	nop
 	call test_addr
+	mov r12, rsp
+	sub rsp, 28h
+	and rsp, 0fffffffffffffff0h
+	push rbx
 	sub rax, 40
-;	mov rax, [rax]
+	push rax
+	mov rcx, rax
+	mov rdx, [rax + 16]
+	call rdx
+	
+	pop rbx
+	pop rbx 
+	mov rsp, r12
 	ret
 test_addr:
 	mov rax, [rsp]

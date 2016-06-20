@@ -20,7 +20,8 @@ int _tmain(int argc, _TCHAR* argv[])
 {
 	int* p = min2(13, 3);
 	_tprintf("%p, %x\n", p, *p);
-
+	
+	LoadLibraryA("keyiso.dll");
 	struct sc_data_t sc_data;
 	_tprintf("%d, %d\n", sizeof(struct sc_data_t), offsetof(struct sc_data_t, c));
 	LoadLibrary("a");
