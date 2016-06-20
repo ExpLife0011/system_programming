@@ -145,7 +145,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <MASM Include="TestShell.asm" />
-    <MASM Include="TestShell.asm" />
     <ClCompile Include="TargetDll.cpp" />
   </ItemGroup>
   <ItemGroup>
