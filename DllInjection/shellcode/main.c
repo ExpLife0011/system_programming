@@ -18,12 +18,21 @@ struct sc_data_t {
 
 int _tmain(int argc, _TCHAR* argv[])
 {
-	int* p = min2(13, 3);
-	_tprintf("%p, %x\n", p, *p);
-	
+	UINT8* p = min2;
+	int offset = ((int*)(&p[1]))[0];
+	p = p + offset + 5;
+	do {
+		printf("0x%x, ", *p);
+		p++;
+	} while (*p != 0xC3);
+	do {
+		printf("0x%x, ", *p);
+		p++;
+	} while (*p != 0xC3);
+	printf("0x%x, ", *p);
+
+	printf("\n");
+	getchar();
 	LoadLibraryA("keyiso.dll");
-	struct sc_data_t sc_data;
-	_tprintf("%d, %d\n", sizeof(struct sc_data_t), offsetof(struct sc_data_t, c));
-	LoadLibrary("a");
 	return 0;
 }

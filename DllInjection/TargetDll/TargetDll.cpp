@@ -5,10 +5,16 @@
 
 extern "C" void funcAsm();
 
-void func3()
+
+struct sc_data_t {
+	char libName[16];
+	void* ploadLibrary;
+	UINT32 a, b, c;
+	UINT32 reserved;
+};
+
+void* FindShellcodeData()
 {
-	printf("func3 enter \n");
-	
 	CONTEXT                       Context;
 	KNONVOLATILE_CONTEXT_POINTERS NvContext;
 	UNWIND_HISTORY_TABLE          UnwindHistoryTable;
@@ -16,6 +22,7 @@ void func3()
 	PVOID                         HandlerData;
 	ULONG64                       EstablisherFrame;
 	ULONG64                       ImageBase;
+	ULONG64						  pData;
 
 	//
 	// First, we'll get the caller's context.
@@ -139,32 +146,25 @@ void func3()
 			}
 		}
 
+		pData = Context.Rsp;
 		printf("\n");
 	}
-
-	printf("func3 exit \n");
+	return (char*)pData + 0x28;
 }
 
-void func2()
+BOOL WINAPI DllMain(
+	_In_ HINSTANCE hinstDLL,
+	_In_ DWORD     fdwReason,
+	_In_ LPVOID    lpvReserved
+	)
 {
-	printf("func2 enter \n");
-	func3();
-	printf("func2 exit \n");
-}
-
-void func1()
-{
-	printf("func1 enter \n");
-	func2();
-	printf("func1 exit \n");
-}
-
-int DllMain()
-{
-	printf("Main enter \n");
-	funcAsm();
-	func1();
-	printf("Main exit \n");
-	getchar();
-	return 0;
+	if (fdwReason != DLL_PROCESS_ATTACH)
+		return TRUE;
+	//funcAsm();
+	sc_data_t* pData;
+	pData = (sc_data_t*) FindShellcodeData();
+	pData->c = pData->a + pData->b;
+	printf("a = %d, b = %d, c = %d, s = %s\n", pData->a, pData->b, pData->c, pData->libName);
+	printf("data: 0x%p, 0x%p\n", pData, *pData);
+	return TRUE;
 }

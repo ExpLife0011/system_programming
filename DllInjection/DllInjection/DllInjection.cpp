@@ -50,11 +50,9 @@ struct sc_data_t {
 	UINT32 reserved;
 };
 
-char sc_bytecode[] = { 0xE8, 0x20, 0x00, 0x00, 0x00, 0x4C, 0x8B, 0xE4, 0x48, 0x83, 0xEC,
-					   0x28, 0x48, 0x83, 0xE4, 0xF0, 0x53, 0x48, 0x83,
-					   0xE8, 0x28, 0x50, 0x48, 0x8B, 0xC8, 0x48, 0x8B,
-					   0x50, 0x10, 0xFF, 0xD2, 0x5B, 0x5B, 0x49, 0x8B, 0xE4, 0xC3, 0x48,
-					   0x8B, 0x04, 0x24, 0x48, 0x83, 0xE8, 0x05, 0xC3 };
+char sc_bytecode[] = { 0xe8, 0x28, 0x0, 0x0, 0x0, 0x4c, 0x8b, 0xe4, 0x48, 0x83, 0xec, 0x28, 0x48, 0x83,
+0xe4, 0xf0, 0x53, 0x48, 0x83, 0xe8, 0x28, 0x50, 0x48, 0x8b, 0xc8, 0x48, 0x8b, 0x50, 0x10, 0x48, 0x83, 
+0xec, 0x28, 0xff, 0xd2, 0x48, 0x83, 0xc4, 0x28, 0x5b, 0x5b, 0x49, 0x8b, 0xe4, 0xc3, 0x48, 0x8b, 0x4, 0x24, 0x48, 0x83, 0xe8, 0x5, 0xc3};
 
 int _tmain(int argc, _TCHAR* argv[])
 {
@@ -83,9 +81,12 @@ int _tmain(int argc, _TCHAR* argv[])
 	}
 
 	sc_data_t sc_data;
-	strcpy_s(sc_data.libName, "keyiso.dll");
+	strcpy_s(sc_data.libName, "targetdll.dll");
 	printf("%s\n", sc_data.libName);
 	sc_data.ploadLibrary = (void*)0x000007FD9F883ABC;
+	sc_data.a = 6;
+	sc_data.b = 4;
+	sc_data.c = 0;
 	
 	// writing shellcode to remote process
 	SIZE_T ret = RemoteWriteMemory(pi, baseAddr, &sc_data, sizeof(sc_data_t));
@@ -93,7 +94,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	ret = RemoteWriteMemory(pi, (char*)baseAddr + sizeof(sc_data_t), &sc_bytecode, sizeof(sc_bytecode));
 	printf("Written bytes %d \n", ret);
 	
-	//LoadLibraryA("keyiso.dll");
+	//HANDLE rs = LoadLibraryA(sc_data.libName);
 
 	// creating remote thread for nop-shellode execution
 	HANDLE hThr = RemoteCreateThread(pi, (char*)baseAddr + sizeof(sc_data_t));
@@ -165,7 +166,7 @@ bool CreateSuspendedProcess(_TCHAR* cmd, PROCESS_INFORMATION* pi)
 		NULL,           // Process handle not inheritable
 		NULL,           // Thread handle not inheritable
 		FALSE,          // Set handle inheritance to FALSE
-		0,	// Flag: create suspended process until ResumeThread
+		CREATE_SUSPENDED,	// Flag: create suspended process until ResumeThread
 		NULL,           // Use parent's environment block
 		NULL,           // Use parent's starting directory 
 		&si,            // Pointer to STARTUPINFO structure
