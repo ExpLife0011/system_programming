@@ -6,6 +6,8 @@
 загрузть его, но не запускать
 найти в нем указатель на kernel32.dll
 найти в нем LoadLibrary (мб он всегда по одинаковому смещению)
+
+RtlAddFunctionTable <- for unwinding
 */
 
 #include "stdafx.h"
