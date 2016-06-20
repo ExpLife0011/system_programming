@@ -144,11 +144,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <MASM Include="TestShell.asm" />
     <ClCompile Include="TargetDll.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="WinStructures.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

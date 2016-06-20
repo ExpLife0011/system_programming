@@ -1,11 +1,6 @@
 #include <stdio.h>
 #include <windows.h>
 
-#include "WinStructures.h"
-
-extern "C" void funcAsm();
-
-
 struct sc_data_t {
 	char libName[16];
 	void* ploadLibrary;
@@ -24,62 +19,35 @@ void* FindShellcodeData()
 	ULONG64                       ImageBase;
 	ULONG64						  pData;
 
-	//
 	// First, we'll get the caller's context.
-	//
-
 	RtlCaptureContext(&Context);
 
-	//
-	// Initialize the (optional) unwind history table.
-	//
 
+	// Initialize the (optional) unwind history table.
 	RtlZeroMemory(
 		&UnwindHistoryTable,
 		sizeof(UNWIND_HISTORY_TABLE));
 
-	//UnwindHistoryTable.Unwind = TRUE; // fck
-
-	//
 	// This unwind loop intentionally skips the first call frame, as it shall
 	// correspond to the call to StackTrace64, which we aren't interested in.
-	//
-
-	for (ULONG Frame = 0;
-		 ;
-		 Frame++)
-	{
-		//
+	for (ULONG Frame = 0;; Frame++) {
 		// Try to look up unwind metadata for the current function.
-		//
-
 		RuntimeFunction = RtlLookupFunctionEntry(
 			Context.Rip,
 			&ImageBase,
-			&UnwindHistoryTable
-			);
+			&UnwindHistoryTable);
 
 		RtlZeroMemory(
 			&NvContext,
 			sizeof(KNONVOLATILE_CONTEXT_POINTERS));
 
-		if (!RuntimeFunction)
-		{
-			//
+		if (!RuntimeFunction) {
 			// If we don't have a RUNTIME_FUNCTION, then we've encountered
 			// a leaf function.  Adjust the stack approprately.
-			//
-
 			Context.Rip  = (ULONG64)(*(PULONG64)Context.Rsp);
 			Context.Rsp += 8;
-		}
-		else
-		{
-			//
-			// Otherwise, call upon RtlVirtualUnwind to execute the unwind for
-			// us.
-			//
-
+		} else {
+			// Otherwise, call upon RtlVirtualUnwind to execute the unwind for us.
 			RtlVirtualUnwind(
 				UNW_FLAG_NHANDLER,
 				ImageBase,
@@ -91,25 +59,20 @@ void* FindShellcodeData()
 				&NvContext);
 		}
 
-		//
 		// If we reach an RIP of zero, this means that we've walked off the end
 		// of the call stack and are done.
-		//
-
 		if (!Context.Rip)
 			break;
 
-		//
 		// Display the context.  Note that we don't bother showing the XMM
 		// context, although we have the nonvolatile portion of it.
-		//
-
 		printf(
 			"FRAME %02x: Rip=%p Rsp=%p Rbp=%p\n",
 			Frame,
 			Context.Rip,
 			Context.Rsp,
 			Context.Rbp);
+
 		printf(
 			"r12=%p r13=%p r14=%p\n"
 			"rdi=%p rsi=%p rbx=%p\n"
@@ -121,30 +84,7 @@ void* FindShellcodeData()
 			Context.Rsi,
 			Context.Rbx,
 			Context.Rbp,
-			Context.Rsp
-			);
-
-		static const CHAR* RegNames[ 16 ] =
-		{ "Rax", "Rcx", "Rdx", "Rbx", "Rsp", "Rbp", "Rsi", "Rdi", "R8", "R9",
-		  "R10", "R11", "R12", "R13", "R14", "R15" };
-
-		//
-		// If we have stack-based register stores, then display them here.
-		//
-
-		for (ULONG i = 0;
-			 i < 16;
-			 i++)
-		{
-			if (NvContext.IntegerContext[ i ])
-			{
-				printf(
-					" -> Saved register '%s' on stack at %p (=> %p)\n",
-					RegNames[ i ],
-					NvContext.IntegerContext[ i ],
-					*NvContext.IntegerContext[ i ]);
-			}
-		}
+			Context.Rsp);
 
 		pData = Context.Rsp;
 		printf("\n");
@@ -155,12 +95,11 @@ void* FindShellcodeData()
 BOOL WINAPI DllMain(
 	_In_ HINSTANCE hinstDLL,
 	_In_ DWORD     fdwReason,
-	_In_ LPVOID    lpvReserved
-	)
+	_In_ LPVOID    lpvReserved)
 {
 	if (fdwReason != DLL_PROCESS_ATTACH)
 		return TRUE;
-	//funcAsm();
+
 	sc_data_t* pData;
 	pData = (sc_data_t*) FindShellcodeData();
 	pData->c = pData->a + pData->b;
