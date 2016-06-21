@@ -89,7 +89,7 @@ void* FindShellcodeData()
 		pData = Context.Rsp;
 		printf("\n");
 	}
-	return (char*)pData + 0x28;
+	return *((char**)(pData + 0x20));
 }
 
 BOOL WINAPI DllMain(
@@ -104,6 +104,5 @@ BOOL WINAPI DllMain(
 	pData = (sc_data_t*) FindShellcodeData();
 	pData->c = pData->a + pData->b;
 	printf("a = %d, b = %d, c = %d, s = %s\n", pData->a, pData->b, pData->c, pData->libName);
-	printf("data: 0x%p, 0x%p\n", pData, *pData);
 	return TRUE;
 }

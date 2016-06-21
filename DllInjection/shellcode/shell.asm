@@ -62,9 +62,9 @@ min2 PROC
 	push rax
 	mov rcx, rax
 	mov rdx, [rax + 16]
-	sub rsp, 28h
+	sub rsp, 20h
 	call rdx
-	add rsp, 28h
+	add rsp, 20h
 	pop rbx
 	pop rbx 
 	mov rsp, r12
