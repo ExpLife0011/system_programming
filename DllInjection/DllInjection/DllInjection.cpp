@@ -37,6 +37,7 @@ void WaitForProcess(PROCESS_INFORMATION pi);
 void* RemoteAllocateMemory(PROCESS_INFORMATION pi, SIZE_T size);
 BOOL RemoteFreeMemory(PROCESS_INFORMATION pi, void* baseAddr);
 SIZE_T RemoteWriteMemory(PROCESS_INFORMATION pi, void* baseAddr, void* dataAddr, SIZE_T dataLen);
+SIZE_T RemoteReadMemory(PROCESS_INFORMATION pi, void* baseAddr, void* dataAddr, SIZE_T dataLen);
 HANDLE RemoteCreateThread(PROCESS_INFORMATION pi, void* addr);
 
 void* FindKernel32AddressX86(PROCESS_INFORMATION pi); // ok for 32(main) - 32(susp)
@@ -93,8 +94,6 @@ int _tmain(int argc, _TCHAR* argv[])
 	printf("Written bytes %d \n", ret);
 	ret = RemoteWriteMemory(pi, (char*)baseAddr + sizeof(sc_data_t), &sc_bytecode, sizeof(sc_bytecode));
 	printf("Written bytes %d \n", ret);
-	
-	//HANDLE rs = LoadLibraryA(sc_data.libName);
 
 	// creating remote thread for nop-shellode execution
 	HANDLE hThr = RemoteCreateThread(pi, (char*)baseAddr + sizeof(sc_data_t));
@@ -108,6 +107,11 @@ int _tmain(int argc, _TCHAR* argv[])
 	printf("WFSO ret %d \n", ret);
 	ret = CloseHandle(hThr);
 	printf("CH ret %d \n", ret);
+
+	sc_data_t sc_new_data;
+	ret = RemoteReadMemory(pi, baseAddr, &sc_new_data, sizeof(sc_data_t));
+	printf("Read bytes %d \n", ret);
+	printf("New values: a = %d, b = %d, c = %d \n", sc_new_data.a, sc_new_data.b, sc_new_data.c);
 
 	// find kernel32.dll base address
 	void* kernel32Base = FindKernel32AddressSelf(pi);
@@ -152,6 +156,14 @@ SIZE_T RemoteWriteMemory(PROCESS_INFORMATION pi, void* baseAddr, void* dataAddr,
 	if (!WriteProcessMemory(pi.hProcess, baseAddr, dataAddr, dataLen, &written))
 		printf("Error writing memory to remote process: 0x%x \n", GetLastError());
 	return written;
+}
+
+SIZE_T RemoteReadMemory(PROCESS_INFORMATION pi, void* baseAddr, void* dataAddr, SIZE_T dataLen)
+{
+	SIZE_T read = 0;
+	if (!ReadProcessMemory(pi.hProcess, baseAddr, dataAddr, dataLen, &read))
+		printf("Error reading memory from remote process: 0x%x \n", GetLastError());
+	return read;
 }
 
 bool CreateSuspendedProcess(_TCHAR* cmd, PROCESS_INFORMATION* pi)
